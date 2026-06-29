@@ -149,13 +149,16 @@ class GeminiTTSPlugin(Star):
 
                     if attr_str:
                         voice_match = re.search(r'voice=["\']([^"\']*)["\']', attr_str)
-                        if voice_match: voice = voice_match.group(1)
+                        if voice_match:
+                            voice = voice_match.group(1)
                         
                         scene_match = re.search(r'scene=["\']([^"\']*)["\']', attr_str)
-                        if scene_match: scene = scene_match.group(1)
+                        if scene_match:
+                            scene = scene_match.group(1)
                         
                         context_match = re.search(r'sample_context=["\']([^"\']*)["\']', attr_str)
-                        if context_match: sample_context = context_match.group(1)
+                        if context_match:
+                            sample_context = context_match.group(1)
 
                     audio_path = await self.generate_tts_audio(
                         event=event,
