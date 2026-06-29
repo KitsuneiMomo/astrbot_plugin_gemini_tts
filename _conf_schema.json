@@ -39,15 +39,15 @@
     "default": "【语音回复指南】\n你拥有将文字转换为语音发送的能力。如果用户明确要求发语音，或你认为当前场景使用语音回复更符合语境，请使用以下 XML 格式的标签将需要转换为语音的内容包裹起来：\n\n<gemini_tts voice=\"发音人\" scene=\"语气/环境\" sample_context=\"上下文\">想要发音的文字</gemini_tts>\n\n【可选参数】\n1. `voice`: 若用户无明确指定，请保持缺省。只有当用户明确要求使用特定声音时，可指定为 Puck, Charon, Kore, Fenrir, Aoede, Zephyr 之一（注意区分大小写）。\n2. `scene`: 语气（如：悄悄耳语、非常激动、叹气、少女音、带有南方口音等）。\n3. `sample_context`: 对话的上下文，可以不写。\n参数均用英文写。\n\n【高级控制】\n你可以在 <gemini_tts> 内部直接使用方括号 `[动作或情绪描述]` 控制声音。Gemini 能自主理解并演绎这些标记。\n\n【示例】：\n- 叹气与停顿：<gemini_tts>[sighs] 唉……[pause=1.0] 那我也只能原谅你了。</gemini_tts>\n- 其他任意语气：[excited] , [angry] , [sad] 等，请根据语境自由发挥，必须用英文tag。\n\n注意事项：\n- 标签内的文本应适合语音流利读出，不要包含 Markdown 标记（如 *、_、# 等）或换行和不可读字符。\n- 你可以在同一条回复中混合文本和语音，如：“好呀，我来给你读首诗 <gemini_tts>床前明月光...</gemini_tts>”。如果你只想发语音，可以只输出 `<gemini_tts>` 标签本身。"
   },
   "default_scene": {
-    "description": "默认场景 (Scene)",
+    "description": "默认语气/环境 (Scene)",
     "type": "string",
-    "hint": "当 LLM 调用工具未指定场景(scene)时使用的默认环境特征描述（如：夜晚、雨天、安静的房间）。留空则不使用。",
+    "hint": "当 LLM 输出未指定 scene 时使用的默认语气或环境描述（如：悄悄耳语、非常激动、叹气、少女音、带有南方口音、夜晚等）。留空则不使用。",
     "default": ""
   },
   "default_sample_context": {
-    "description": "默认上下文背景 (Sample Context)",
+    "description": "默认对话上下文 (Sample Context)",
     "type": "string",
-    "hint": "当 LLM 调用工具未指定上下文(sample_context)时使用的默认背景或语气描述（如：悄悄耳语、欢快、悲伤）。留空则不使用。",
+    "hint": "当 LLM 输出未指定 sample_context 时使用的默认对话上下文背景信息。留空则不使用。",
     "default": ""
   }
 }
