@@ -31,6 +31,7 @@ class GeminiTTSPlugin(Star):
         self.api_keys = self.config.get("api_keys", [])
         self.tts_model = self.config.get("tts_model", "gemini-3.1-flash-tts-preview")
         self.voice_name = self.config.get("voice_name", "Zephyr")
+        self.custom_voice = self.config.get("custom_voice", "")
         self.temperature = self.config.get("temperature", 1.0)
         self.enable_system_prompt = self.config.get("enable_system_prompt", True)
         self.system_prompt_addition = self.config.get("system_prompt_addition", "")
@@ -199,6 +200,9 @@ class GeminiTTSPlugin(Star):
             return None
             
         selected_voice = voice_name if voice_name else self.voice_name
+        if selected_voice and selected_voice.lower() == "custom":
+            selected_voice = self.custom_voice.strip() if self.custom_voice else "Zephyr"
+            
         final_scene = scene.strip() if (scene and scene.strip()) else self.default_scene.strip()
         final_context = sample_context.strip() if (sample_context and sample_context.strip()) else self.default_sample_context.strip()
         
