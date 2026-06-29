@@ -19,7 +19,7 @@ from astrbot.api.message_components import Plain, Record
 @register(
     "astrbot_plugin_gemini_tts",
     "KitsuneiMomo",
-    "让AI可以调用Gemini TTS工具发送语音，支持多API Key轮询与自动重试容错",
+    "让AI可以调用Gemini TTS工具发送语音",
     "1.1.1",
     "https://github.com/KitsuneiMomo/astrbot_plugin_gemini_tts",
 )
