@@ -1,0 +1,53 @@
+{
+  "api_keys": {
+    "description": "Gemini API Keys 列表",
+    "type": "list",
+    "hint": "填入一个或多个 Gemini API Key。当配置多个时，将以轮询(Round Robin)方式调用。不填则尝试使用系统默认密钥或环境变量 GEMINI_API_KEY。",
+    "items": {
+      "type": "string"
+    },
+    "default": []
+  },
+  "tts_model": {
+    "description": "TTS 模型名称",
+    "type": "string",
+    "hint": "使用的 Gemini TTS 模型名称，如 gemini-3.1-flash-tts-preview 或 gemini-2.0-flash-exp",
+    "default": "gemini-3.1-flash-tts-preview"
+  },
+  "voice_name": {
+    "description": "默认发音人",
+    "type": "string",
+    "hint": "可选的预设发音人：Puck, Charon, Kore, Fenrir, Aoede, Zephyr 等 (注意区分大小写)",
+    "default": "Zephyr"
+  },
+  "temperature": {
+    "description": "合成温度(Temperature)",
+    "type": "float",
+    "hint": "控制语音合成的随机度和节奏，范围在0.0到2.0之间，默认 1.0",
+    "default": 1.0
+  },
+  "enable_system_prompt": {
+    "description": "自动注入引导提示词",
+    "type": "bool",
+    "hint": "是否在 LLM 请求前自动注入提示词，引导 AI 酌情使用 XML 标签产生语音回复",
+    "default": true
+  },
+  "system_prompt_addition": {
+    "description": "引导使用语音的提示词内容",
+    "type": "text",
+    "hint": "注入到 system prompt 中引导 AI 如何在回复中输出语音标签指令",
+    "default": "\n【重要规则：语音回复指南】\n你拥有将文字转换为语音发送的能力。如果用户明确要求发语音、朗读、唱歌，或你认为当前场景使用语音回复更符合语境，请使用以下 XML 格式的标签将需要转换为语音的内容包裹起来：\n\n<gemini_tts voice=\"发音人\" scene=\"环境场景\" sample_context=\"语气背景\">想要发音的文字</gemini_tts>\n\n可选参数说明：\n1. `voice`: 若用户无明确指定，请保持不写（即缺省）。只有当用户明确要求使用特定声音时，可指定为 Puck, Charon, Kore, Fenrir, Aoede, Zephyr 之一（注意区分大小写）。\n2. `scene`: 环境特征（如：夜晚、雨天、安静的房间、喧闹的街道等）。\n3. `sample_context`: 说话时的语气（如：悄悄耳语、非常激动、叹气等）。\n\n注意事项：\n- 标签内的文本应适合语音流利读出，不要包含 Markdown 标记（如 *、_、# 等）或换行和不可读字符。\n- 你可以在同一条回复中混合文本和语音，如：“好呀，我来给你读首诗：<gemini_tts>床前明月光...</gemini_tts>”。如果你只想发语音，可以只输出 `<gemini_tts>` 标签本身。\n- 请根据聊天的上下文与交互风格灵活决策是否及何时进行语音发送。"
+  },
+  "default_scene": {
+    "description": "默认场景 (Scene)",
+    "type": "string",
+    "hint": "当 LLM 调用工具未指定场景(scene)时使用的默认环境特征描述（如：夜晚、雨天、安静的房间）。留空则不使用。",
+    "default": ""
+  },
+  "default_sample_context": {
+    "description": "默认上下文背景 (Sample Context)",
+    "type": "string",
+    "hint": "当 LLM 调用工具未指定上下文(sample_context)时使用的默认背景或语气描述（如：悄悄耳语、欢快、悲伤）。留空则不使用。",
+    "default": ""
+  }
+}
