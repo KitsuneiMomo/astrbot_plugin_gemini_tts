@@ -69,6 +69,10 @@ AI 会在合适的语境下自动选择使用标签。例如：
 * `scene`: 环境场景（如：`夜晚`、`雨天`、`安静的房间`）。
 * `sample_context`: 说话时的语气背景（如：`悄悄耳语`、`非常激动`、`叹气`）。
 
+### 4. 运行效果示例
+
+![运行效果图](./example.png)
+
 ---
 
 ## ![warning](https://img.icons8.com/material-outlined/24/error.png) 注意事项
