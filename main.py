@@ -39,6 +39,8 @@ class GeminiTTSPlugin(Star):
         # 用户设置的默认场景和背景
         self.default_scene = self.config.get("default_scene", "")
         self.default_sample_context = self.config.get("default_sample_context", "")
+        self.audio_profile_mode = self.config.get("audio_profile_mode", "ai")
+        self.default_audio_profile = self.config.get("default_audio_profile", "")
         
         # 缓存备用 API 密钥，避免重试时高频读取磁盘
         self.fallback_keys = []
@@ -113,7 +115,10 @@ class GeminiTTSPlugin(Star):
     async def inject_tts_instruction(self, event: AstrMessageEvent, req: ProviderRequest):
         """注入系统提示词以引导 LLM 知道可以使用该特殊语法生成语音回复"""
         if self.enable_system_prompt and self.system_prompt_addition:
-            req.system_prompt = (req.system_prompt or "") + self.system_prompt_addition
+            sys_prompt = self.system_prompt_addition
+            if self.audio_profile_mode == "ai" and "audio_profile" not in sys_prompt:
+                sys_prompt += "\n\n【音频画像补充说明】\n你可以在 `<gemini_tts>` 标签中添加 `audio_profile` 属性来自行定义音频的角色画像（例如：`audio_profile=\"傲娇美少女\"` 或 `audio_profile=\"冷酷大叔\"` 等），以此让语音更加符合人设。"
+            req.system_prompt = (req.system_prompt or "") + sys_prompt
 
     @filter.on_decorating_result()
     async def process_text_and_tts(self, event: AstrMessageEvent):
@@ -147,6 +152,7 @@ class GeminiTTSPlugin(Star):
                     voice = None
                     scene = None
                     sample_context = None
+                    audio_profile = None
 
                     if attr_str:
                         voice_match = re.search(r'voice=["\']([^"\']*)["\']', attr_str)
@@ -161,12 +167,17 @@ class GeminiTTSPlugin(Star):
                         if context_match:
                             sample_context = context_match.group(1)
 
+                        audio_profile_match = re.search(r'(?:audio_profile|profile)=["\']([^"\']*)["\']', attr_str)
+                        if audio_profile_match:
+                            audio_profile = audio_profile_match.group(1)
+
                     audio_path = await self.generate_tts_audio(
                         event=event,
                         text=inner_text,
                         voice_name=voice,
                         scene=scene,
-                        sample_context=sample_context
+                        sample_context=sample_context,
+                        audio_profile=audio_profile
                     )
 
                     if audio_path:
@@ -192,7 +203,8 @@ class GeminiTTSPlugin(Star):
         text: str,
         voice_name: Optional[str] = None,
         scene: Optional[str] = None,
-        sample_context: Optional[str] = None
+        sample_context: Optional[str] = None,
+        audio_profile: Optional[str] = None
     ) -> Optional[str]:
         """核心语音合成业务逻辑"""
         cleaned_text = self.clean_text_for_tts(text)
@@ -206,7 +218,15 @@ class GeminiTTSPlugin(Star):
         final_scene = scene.strip() if (scene and scene.strip()) else self.default_scene.strip()
         final_context = sample_context.strip() if (sample_context and sample_context.strip()) else self.default_sample_context.strip()
         
-        logger.info(f"[Gemini TTS] 正在提取标签进行合成. 文本: '{cleaned_text[:30]}...' 发音人: {selected_voice} 场景: {final_scene} 背景: {final_context}")
+        # Resolve audio profile based on mode
+        final_audio_profile = None
+        if self.audio_profile_mode == "ai":
+            final_audio_profile = audio_profile.strip() if (audio_profile and audio_profile.strip()) else self.default_audio_profile.strip()
+        elif self.audio_profile_mode == "default":
+            final_audio_profile = self.default_audio_profile.strip()
+        # if mode is "disable", final_audio_profile remains None
+        
+        logger.info(f"[Gemini TTS] 正在提取标签进行合成. 文本: '{cleaned_text[:30]}...' 发音人: {selected_voice} 场景: {final_scene} 背景: {final_context} 画像: {final_audio_profile}")
         
         max_attempts = self.get_total_keys_count()
         if max_attempts == 0:
@@ -220,11 +240,25 @@ class GeminiTTSPlugin(Star):
                 client = genai.Client(api_key=api_key)
                 
                 prompt_parts = []
+                if final_audio_profile:
+                    prompt_parts.append("Read the following transcript based on the audio profile.")
+                    prompt_parts.append(f"# Audio Profile\n{final_audio_profile}\n")
+                
                 if final_scene:
-                    prompt_parts.append(f"## Scene\n{final_scene}\n")
+                    if final_audio_profile:
+                        prompt_parts.append(f"## Scene:\n{final_scene}\n")
+                    else:
+                        prompt_parts.append(f"## Scene\n{final_scene}\n")
                 if final_context:
-                    prompt_parts.append(f"## Sample Context\n{final_context}\n")
-                prompt_parts.append(f"## Transcript\n{cleaned_text}")
+                    if final_audio_profile:
+                        prompt_parts.append(f"## Sample Context:\n{final_context}\n")
+                    else:
+                        prompt_parts.append(f"## Sample Context\n{final_context}\n")
+                
+                if final_audio_profile:
+                    prompt_parts.append(f"## Transcript:\n{cleaned_text}")
+                else:
+                    prompt_parts.append(f"## Transcript\n{cleaned_text}")
                 
                 prompt_text = "\n".join(prompt_parts)
                 contents = [
