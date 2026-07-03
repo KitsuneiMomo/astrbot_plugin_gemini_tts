@@ -1,4 +1,7 @@
-# astrbot_plugin_gemini_tts
+<div align="center">
+  <img src="./logo.png" width="128" height="128" alt="logo"/>
+  <h1>Gemini TTS 插件 (astrbot_plugin_gemini_tts)</h1>
+</div>
 
 本插件是为 AstrBot 开发的一个第三方语音合成辅助插件。它通过在 LLM（大语言模型）的文本回复中注入与解析特定的 XML 标签（`<gemini_tts>...</gemini_tts>`），并调用 Google GenAI API 异步生成高拟真语音。
 
@@ -25,7 +28,7 @@ AstrBot 本身已提供系统级的内置 TTS 服务（支持全局 Gemini TTS�
 在设计语音生成逻辑时，本插件没有选择让大模型直接调用工具（Tool/Function Calling），而是采用了“大模型输出 XML 标签，插件在后台正则提取”的方案。主要基于以下考虑：
 
 1. **节约 API 调用频次与额度（对免费 Key 友好）**
-   Gemini 的免费 API Key 具有较严格的每分钟请求次数限制（RPM）。如果采用 Tool Calling，通常需要经过：*大模型生成工具参数 -> 框架执行工具 -> 返回结果给大模型 -> 大模型汇总生成回复* 这样的多轮交互或并发调用，容易频繁触发 Rate Limit（429 报错）。标签解析方案只需一次单向 of LLM 请求即可完成文本和语音参数的下发。
+   Gemini 的免费 API Key 具有较严格的每分钟请求次数限制（RPM）。如果采用 Tool Calling，通常需要经过：*大模型生成工具参数 -> 框架执行工具 -> 返回结果给大模型 -> 大模型汇总生成回复* 这样的多轮交互或并发调用，容易频繁触发 Rate Limit（429 报错）。标签解析方案只需一次单向 LLM 请求即可完成文本和语音参数的下发。
 2. **减少 Token 消耗**
    定义和描述 Function/Tool 的 JSON Schema 需要占用较多的系统提示词 Token。直接让模型在上下文输出特定的 XML 语法结构更为轻量。
 3. **兼容 Agent 能力较弱的低参数模型**
@@ -37,7 +40,7 @@ AstrBot 本身已提供系统级的内置 TTS 服务（支持全局 Gemini TTS�
 
 在插件的配置文件 `_conf_schema.json` 或 WebUI 后台中，您可以配置以下参数：
 
-* **`api_keys`**: Gemini API Key 列表。支持配置多个，插件将通过轮询方式调用。留空时，将尝试读取系统环境变量 `GEMINI_API_KEY` 或 AstrBot 内置 of Gemini 密钥。
+* **`api_keys`**: Gemini API Key 列表。支持配置多个，插件将通过轮询方式调用。留空时，将尝试读取系统环境变量 `GEMINI_API_KEY` 或 AstrBot 内置 Gemini 密钥。
 * **`tts_model`**: 合成模型名称，默认为 `gemini-3.1-flash-tts-preview`。
 * **`voice_name`**: 默认发音人，可选：`Puck`, `Charon`, `Kore`, `Fenrir`, `Aoede`, `Zephyr` 等。
 * **`temperature`**: 控制语音的随机度与节奏。
@@ -71,7 +74,9 @@ AI 会在合适的语境下自动选择使用标签。例如：
 
 ### 4. 运行效果示例
 
-![运行效果图](./example.png)
+<p align="center">
+  <img src="./example.png" alt="运行效果图"/>
+</p>
 
 ---
 
@@ -79,4 +84,4 @@ AI 会在合适的语境下自动选择使用标签。例如：
 
 1. **依赖项**：本插件使用 Google 官方最新的 `google-genai` SDK。请确保在插件部署环境执行过依赖安装。
 2. **网络环境**：调用 Gemini 语音服务需要您的宿主服务器能够正常访问 Google API 终端点（`https://generativelanguage.googleapis.com`）。
-3. **多 Key 配额**：如果经常遇到 `429 RESOURCE_EXHAUSTED` 错误，建议在配置项中多填入几个 API Key，以激活插件自带 of 轮询容错机制。
+3. **多 Key 配额**：如果经常遇到 `429 RESOURCE_EXHAUSTED` 错误，建议在配置项中多填入几个 API Key，以激活插件自带轮询容错机制。
