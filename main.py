@@ -304,11 +304,15 @@ class GeminiTTSPlugin(Star):
                 audio_data = b""
                 mime_type = None
                 
-                for chunk in client.models.generate_content_stream(
+                # 🛠️ 关键修改点：使用 aio 异步获取流式音频响应
+                response_stream = await client.aio.models.generate_content_stream(
                     model=self.tts_model,
                     contents=contents,
                     config=generate_content_config,
-                ):
+                )
+                
+                # 🛠️ 关键修改点：使用 async for 进行非阻塞数据流获取
+                async for chunk in response_stream:
                     if chunk.parts is None:
                         continue
                     part = chunk.parts[0]
@@ -358,7 +362,7 @@ class GeminiTTSPlugin(Star):
         return None
 
     def convert_to_wav(self, audio_data: bytes, mime_type: str) -> bytes:
-        """为原始的 PCM 语音数据加上 WAV 头部"""
+        """为原始的 PCM 语音 data 加上 WAV 头部"""
         parameters = self.parse_audio_mime_type(mime_type)
         bits_per_sample = parameters["bits_per_sample"]
         sample_rate = parameters["rate"]
