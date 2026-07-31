@@ -590,7 +590,7 @@ class GeminiTTSPlugin(Star):
 
         return any_success
 
-    def _get_safety_settings() -> List[types.SafetySetting]:
+    def _get_safety_settings(self) -> List[types.SafetySetting]:
         """根据配置选择安全过滤等级 (BLOCK_NONE | BLOCK_ONLY_HIGH | BLOCK_MEDIUM_AND_ABOVE)"""
         level = getattr(self, "safety_threshold", "BLOCK_ONLY_HIGH")
         threshold_map = {
