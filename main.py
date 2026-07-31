@@ -42,7 +42,7 @@ DEFAULT_SYSTEM_PROMPT_ADDITION = (
     "astrbot_plugin_gemini_tts",
     "KitsuneiMomo",
     "让AI可以调用Gemini TTS工具发送语音与拼接长音频文件",
-    "1.2.1",
+    "1.2.2",
     "https://github.com/KitsuneiMomo/astrbot_plugin_gemini_tts",
 )
 class GeminiTTSPlugin(Star):
