@@ -1,6 +1,6 @@
 name: astrbot_plugin_gemini_tts
 display_name: "Gemini TTS"
 desc: "让AI可以调用Gemini TTS工具发送语音"
-version: "1.2.0"
+version: "1.2.1"
 author: KitsuneiMomo
 repo: https://github.com/KitsuneiMomo/astrbot_plugin_gemini_tts

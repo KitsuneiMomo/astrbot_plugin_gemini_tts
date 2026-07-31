@@ -110,7 +110,7 @@
     "description": "引导使用语音的提示词内容",
     "type": "text",
     "hint": "注入到 system prompt 中引导 AI 如何在回复中输出语音标签指令",
-    "default": "【语音回复指南】\n你拥有将文字转换为语音发送的能力。如果用户明确要求发语音，或你认为当前场景使用语音回复更符合语境，请使用以下 XML 格式的标签将需要转换为语音的内容包裹起来：\n\n<gemini_tts voice=\"发音人\" scene=\"语气/环境\" sample_context=\"上下文\" audio_profile=\"音频画像\">想要发音的文字</gemini_tts>\n\n【可选参数】\n1. `voice`: 若用户无明确指定，请保持缺省。只有当用户明确要求使用特定声音时，可指定为 Puck, Charon, Kore, Fenrir, Aoede, Zephyr 之一（注意区分大小写）。\n2. `scene`: 语气（如：悄悄耳语、非常激动、叹气、少女音、带有南方口音等）。\n3. `sample_context`: 对话的上下文，可以不写。\n4. `audio_profile`: 音频人设画像，用于设定发音人的声线和人设风格（如：傲娇美少女、冷酷大叔、温柔大姐姐、专业男播音员等），可以不写。\n参数均用英文/中文写（对于 audio_profile 和 scene，中文支持更佳，voice 必须是英文发音人名字）。\n\n【高级控制】\n你可以在 <gemini_tts> 内部直接使用方括号 `[动作或情绪描述]` 控制声音。Gemini 能自主理解并演绎这些标记。\n\n【示例】：\n- 叹气与停顿：<gemini_tts>[sighs] 唉……[pause=1.0] 那我也只能原谅你了。</gemini_tts>\n- 其他任意语气：[excited] , [angry] , [sad] 等，请根据语境自由发挥，必须用英文tag。\n\n注意事项：\n- 标签内的文本应适合语音流利读出，不要包含 Markdown 标记（如 *、_、# 等）或换行和不可读字符。\n- 你可以在同一条回复中混合文本和语音，如：“好呀，我来给你读首诗 <gemini_tts>床前明月光...</gemini_tts>”。如果你只想发语音，可以只输出 `<gemini_tts>` 标签本身。"
+    "default": "【语音回复指南】\n你拥有将文字转换为语音发送的能力。如果用户明确要求发语音，或你认为当前场景使用语音回复更符合语境，请使用以下 XML 格式的标签将需要转换为语音的内容包裹起来：\n\n<gemini_tts voice=\"发音人\" scene=\"语气/环境\" sample_context=\"上下文\" audio_profile=\"音频画像\">想要发音的文字</gemini_tts>\n\n【可选参数】\n1. `voice`: 若用户无明确指定，请保持缺省。只有当用户明确要求使用特定声音时，可指定为 Puck, Charon, Kore, Fenrir, Aoede, Zephyr 之一（注意区分大小写）。\n2. `scene`: 语气（如：悄悄耳语、非常激动、叹气、少女音、带有南方口音等）。\n3. `sample_context`: 对话的上下文，可以不写。\n4. `audio_profile`: 音频人设画像，用于设定发音人的声线和人设风格（如：傲娇美少女、冷酷大叔、温柔大姐姐、专业男播音员等），可以不写。\n参数均用英文/中文写（对于 audio_profile 和 scene，中文支持更佳，voice 必须是英文发音人名字）。\n\n【高级控制】\n你可以在 <gemini_tts> 内部直接使用方括号 `[动作或情绪描述]` 控制声音。Gemini 能自主理解并演绎这些标记。\n\n【示例】：\n- 叹气与停顿：<gemini_tts>[sighs] 唉……[short pause] 那我也只能原谅你了。</gemini_tts>\n- 其他任意语气：[excited] , [angry] , [sad] 等，请根据语境自由发挥，必须用英文tag。\n\n注意事项：\n- 标签内的文本应适合语音流利读出，不要包含 Markdown 标记（如 *、_、# 等）或换行和不可读字符。\n- 你可以在同一条回复中混合文本和语音，如：“好呀，我来给你读首诗 <gemini_tts>床前明月光...</gemini_tts>”。如果你只想发语音，可以只输出 `<gemini_tts>` 标签本身。"
   },
   "default_scene": {
     "description": "默认语气/环境 (Scene)",
@@ -123,5 +123,33 @@
     "type": "string",
     "hint": "当 LLM 输出未指定 sample_context 时使用的默认对话上下文背景信息。留空则不使用。",
     "default": ""
+  },
+  "safety_threshold": {
+    "description": "Gemini 内容安全审查等级",
+    "type": "string",
+    "hint": "控制 Gemini TTS 对合成内容的审核敏感度。BLOCK_NONE(完全关闭审核，适合特定合规场景)；BLOCK_ONLY_HIGH(仅拦截极高风险内容，推荐)；BLOCK_MEDIUM_AND_ABOVE(拦截中高风险内容)。",
+    "default": "BLOCK_ONLY_HIGH",
+    "options": [
+      "BLOCK_NONE",
+      "BLOCK_ONLY_HIGH",
+      "BLOCK_MEDIUM_AND_ABOVE"
+    ],
+    "labels": [
+      "BLOCK_NONE (完全关闭审核)",
+      "BLOCK_ONLY_HIGH (仅拦截极高风险内容 - 推荐)",
+      "BLOCK_MEDIUM_AND_ABOVE (严格 - 拦截中高风险内容)"
+    ]
+  },
+  "max_long_tts_segments": {
+    "description": "长音频最大允许分段数",
+    "type": "int",
+    "hint": "单次长音频合成最多允许的 <gemini_long_tts> 标签段数，超出部分将被自动忽略，防止无限生成爆额度。",
+    "default": 15
+  },
+  "max_concurrent_tasks": {
+    "description": "长音频并发合成最大并发数",
+    "type": "int",
+    "hint": "长音频分段并发合成时的最大并发请求数，推荐设置 2~4，避免因瞬间并发请求数过高触发 Gemini API 429 速率限制。",
+    "default": 3
   }
 }
