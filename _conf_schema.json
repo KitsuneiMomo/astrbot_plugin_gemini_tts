@@ -82,6 +82,30 @@
     "hint": "是否在 LLM 请求前自动注入提示词，引导 AI 酌情使用 XML 标签产生语音回复",
     "default": true
   },
+  "enable_long_tts": {
+    "description": "启用长音频合成能力",
+    "type": "bool",
+    "hint": "开启后支持 AI 使用 <gemini_long_tts> 标签输出多段长音频（如播客、多主角对白、长文章朗读等），拼接后发送为音频文件。",
+    "default": false
+  },
+  "long_tts_silence_sec": {
+    "description": "长音频分段间隔静音(秒)",
+    "type": "float",
+    "hint": "每段长音频拼接时的静音停顿长度（秒），推荐 0.3~0.5 秒。",
+    "default": 0.4
+  },
+  "always_inject_prompt": {
+    "description": "全局注入提示词",
+    "type": "bool",
+    "hint": "开启后，总是注入语音提示词；关闭后，只有用户输入包含触发词时才注入提示词，以节省 token 消耗。",
+    "default": true
+  },
+  "trigger_keywords": {
+    "description": "语音触发关键词",
+    "type": "string",
+    "hint": "用英文/中文逗号或换行分隔。关闭“全局注入提示词”后，当用户发言命中以下任一关键词时才注入语音提示词。",
+    "default": "语音,说,唱,读,听,声音,tts,voice,speak,read,listen,audio"
+  },
   "system_prompt_addition": {
     "description": "引导使用语音的提示词内容",
     "type": "text",

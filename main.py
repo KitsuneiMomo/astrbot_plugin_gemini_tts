@@ -2,10 +2,12 @@ import os
 import re
 import json
 import struct
+import base64
+import asyncio
 import mimetypes
 import tempfile
 import uuid
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from google import genai
 from google.genai import types
 
@@ -13,14 +15,19 @@ from astrbot.api.star import Star, Context, StarTools, register
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api import logger, AstrBotConfig
 from astrbot.api.provider import ProviderRequest
-from astrbot.api.message_components import Plain, Record
+
+try:
+    from astrbot.api.message_components import Plain, Record, File
+except ImportError:
+    from astrbot.api.message_components import Plain, Record
+    File = Record
 
 
 @register(
     "astrbot_plugin_gemini_tts",
     "KitsuneiMomo",
-    "让AI可以调用Gemini TTS工具发送语音",
-    "1.1.1",
+    "让AI可以调用Gemini TTS工具发送语音与拼接长音频文件",
+    "1.2.0",
     "https://github.com/KitsuneiMomo/astrbot_plugin_gemini_tts",
 )
 class GeminiTTSPlugin(Star):
@@ -34,7 +41,13 @@ class GeminiTTSPlugin(Star):
         self.custom_voice = self.config.get("custom_voice", "")
         self.temperature = self.config.get("temperature", 1.0)
         self.enable_system_prompt = self.config.get("enable_system_prompt", True)
+        self.always_inject_prompt = self.config.get("always_inject_prompt", True)
+        self.trigger_keywords = self.config.get("trigger_keywords", "语音,说,唱,读,听,声音,tts,voice,speak,read,listen,audio")
         self.system_prompt_addition = self.config.get("system_prompt_addition", "")
+        
+        # 长音频合成设置
+        self.enable_long_tts = self.config.get("enable_long_tts", False)
+        self.long_tts_silence_sec = float(self.config.get("long_tts_silence_sec", 0.4))
         
         # 用户设置的默认场景和背景
         self.default_scene = self.config.get("default_scene", "")
@@ -50,10 +63,17 @@ class GeminiTTSPlugin(Star):
         # Rotation index
         self.key_index = 0
         
-        # 正则表达式匹配语音指令标签
-        self.tts_tag_pattern = re.compile(r'<gemini_tts(?:\s+([^>]*))?>(.*?)</gemini_tts>', re.DOTALL)
+        # 正则表达式匹配语音指令标签 (兼容 XML <gemini_tts>、BBCode [/gemini_tts] 闭合标签及缺失闭合标签的情况)
+        self.tts_tag_pattern = re.compile(
+            r'[<\[]gemini_tts(?:\s+([^>\]]*))?[>\]](.*?)(?:[<\[]\s*[/\\\\]\s*gemini_tts\s*[>\]]?|$)',
+            re.DOTALL | re.IGNORECASE
+        )
+        self.long_tts_tag_pattern = re.compile(
+            r'[<\[]gemini_long_tts(?:\s+([^>\]]*))?[>\]](.*?)(?:[<\[]\s*[/\\\\]\s*gemini_long_tts\s*[>\]]?|$)',
+            re.DOTALL | re.IGNORECASE
+        )
         
-        logger.info("[Gemini TTS] 插件初始化成功 (提示词解析与安全解锁版)")
+        logger.info("[Gemini TTS] 插件初始化成功 (含长音频分段拼接支持)")
 
     def get_fallback_keys(self) -> List[str]:
         """从环境变量或系统的 cmd_config.json 中获取备用 API 密钥"""
@@ -89,7 +109,6 @@ class GeminiTTSPlugin(Star):
         """根据 Round-robin 算法获取轮询密钥"""
         keys = self.api_keys if self.api_keys else self.fallback_keys
         if not keys:
-            # 容错：如果缓存为空，尝试重新动态加载一次
             self.fallback_keys = self.get_fallback_keys()
             keys = self.api_keys if self.api_keys else self.fallback_keys
             if not keys:
@@ -111,18 +130,219 @@ class GeminiTTSPlugin(Star):
         text = re.sub(r'\n+', '，', text)
         return text.strip()
 
+    def parse_tag_attributes(self, attr_str: str) -> dict:
+        """从标签属性字符串中提取 voice, scene, sample_context, audio_profile (支持带引号与不带引号的属性)"""
+        voice, scene, sample_context, audio_profile = None, None, None, None
+        if attr_str:
+            def extract(key_pattern):
+                m = re.search(key_pattern, attr_str, re.IGNORECASE)
+                if m:
+                    return m.group(1) or m.group(2)
+                return None
+
+            voice = extract(r'voice=(?:["\']([^"\']*)["\']|([^\s>\]]+))')
+            scene = extract(r'scene=(?:["\']([^"\']*)["\']|([^\s>\]]+))')
+            sample_context = extract(r'sample_context=(?:["\']([^"\']*)["\']|([^\s>\]]+))')
+            audio_profile = extract(r'(?:audio_profile|profile)=(?:["\']([^"\']*)["\']|([^\s>\]]+))')
+
+        return {
+            "voice": voice,
+            "scene": scene,
+            "sample_context": sample_context,
+            "audio_profile": audio_profile
+        }
+
+    def create_file_component(self, file_path: str):
+        """安全创建 File 消息组件，将文件转为 base64 协议串传输，彻底解决跨 Docker 容器路径挂载不匹配导致的 ENOENT 报错"""
+        file_name = os.path.basename(file_path)
+
+        # 1. 转换为 base64:// 串，通过网络 Payload 直接传给 NapCat/OneBot，不依赖容器本地文件系统
+        if os.path.exists(file_path):
+            try:
+                with open(file_path, "rb") as f:
+                    b64_str = base64.b64encode(f.read()).decode("utf-8")
+                base64_url = f"base64://{b64_str}"
+
+                try:
+                    return File(file_=base64_url, name=file_name)
+                except Exception:
+                    pass
+
+                try:
+                    return File(file=base64_url, name=file_name)
+                except Exception:
+                    pass
+            except Exception as e:
+                logger.warning(f"[Gemini TTS] 转换文件为 base64 失败: {e}")
+
+        # 2. 备用逻辑：直接传递本地路径
+        try:
+            return File(file_=file_path, name=file_name)
+        except Exception:
+            pass
+
+        try:
+            return File(file=file_path, name=file_name)
+        except Exception:
+            pass
+
+        if hasattr(File, "fromFileSystem"):
+            try:
+                return File.fromFileSystem(file_path)
+            except Exception:
+                pass
+
+        logger.warning("[Gemini TTS] 无法正确构造 File 组件，降级为 Record 语音组件发送")
+        return Record.fromFileSystem(file_path)
+
+    async def send_file_via_onebot(self, event: AstrMessageEvent, file_path: str) -> bool:
+        """调用 OneBot (NapCat) 专属扩展 API upload_group_file / upload_private_file 发送文件"""
+        bot = getattr(event, "bot", None)
+        if not bot:
+            return False
+
+        client = bot.api if hasattr(bot, "api") else bot
+        if not client or not hasattr(client, "call_action"):
+            return False
+
+        file_name = os.path.basename(file_path)
+
+        b64_file = None
+        if os.path.exists(file_path):
+            try:
+                with open(file_path, "rb") as f:
+                    b64_str = base64.b64encode(f.read()).decode("utf-8")
+                b64_file = f"base64://{b64_str}"
+            except Exception as e:
+                logger.warning(f"[Gemini TTS] 读取音频转 base64 失败: {e}")
+
+        rel_path = os.path.join("data", "plugin_data", "astrbot_plugin_gemini_tts", "temp", file_name)
+
+        group_id = None
+        user_id = None
+
+        if hasattr(event, "get_group_id"):
+            try:
+                gid = event.get_group_id()
+                if gid:
+                    group_id = int(gid)
+            except Exception:
+                pass
+        if not group_id and hasattr(event, "message_obj") and getattr(event.message_obj, "group_id", None):
+            try:
+                group_id = int(event.message_obj.group_id)
+            except Exception:
+                pass
+
+        if hasattr(event, "get_sender_id"):
+            try:
+                uid = event.get_sender_id()
+                if uid:
+                    user_id = int(uid)
+            except Exception:
+                pass
+        if not user_id and hasattr(event, "message_obj") and getattr(event.message_obj, "sender", None):
+            try:
+                user_id = int(event.message_obj.sender.user_id)
+            except Exception:
+                pass
+
+        async def _call_api(action: str, **kwargs):
+            res = await client.call_action(action, **kwargs)
+            if isinstance(res, dict):
+                if res.get("status") == "failed" or (res.get("retcode") is not None and res.get("retcode") != 0):
+                    msg = res.get("wording") or res.get("message") or str(res)
+                    raise ValueError(f"{action} 接口返回错误: {msg} (retcode={res.get('retcode')})")
+            return res
+
+        # 1. 群聊上传
+        if group_id:
+            logger.info(f"[Gemini TTS] 尝试为群 {group_id} 上传群文件: {file_name}...")
+            group_candidates = [
+                ("upload_group_file", file_path),
+                ("upload_group_file", f"file://{file_path}"),
+                ("upload_group_file", rel_path),
+                ("upload_group_file", f"./{rel_path}"),
+                ("upload_file_stream", file_path),
+            ]
+            if b64_file:
+                group_candidates.append(("upload_group_file", b64_file))
+
+            for action_name, f_arg in group_candidates:
+                try:
+                    logger.info(f"[Gemini TTS] 尝试群文件 API: {action_name}(group_id={group_id}, file={str(f_arg)[:40]}...)")
+                    await _call_api(action_name, group_id=group_id, file=f_arg, name=file_name)
+                    logger.info(f"[Gemini TTS] 🎉 群文件发送成功！(接口: {action_name})")
+                    return True
+                except Exception as e:
+                    logger.warning(f"[Gemini TTS] 群文件接口 {action_name} ({str(f_arg)[:30]}...) 尝试失败: {e}")
+
+        # 2. 私聊上传
+        elif user_id:
+            logger.info(f"[Gemini TTS] 尝试为用户 {user_id} 发送私聊文件: {file_name}...")
+            private_candidates = []
+            if b64_file:
+                private_candidates.append(("upload_private_file", b64_file))
+            private_candidates.extend([
+                ("upload_private_file", file_path),
+                ("upload_private_file", f"file://{file_path}"),
+                ("upload_private_file", rel_path),
+                ("upload_file_stream", file_path),
+            ])
+
+            for action_name, f_arg in private_candidates:
+                try:
+                    logger.info(f"[Gemini TTS] 尝试私聊文件 API: {action_name}(user_id={user_id}, file={str(f_arg)[:40]}...)")
+                    await _call_api(action_name, user_id=user_id, file=f_arg, name=file_name)
+                    logger.info(f"[Gemini TTS] 🎉 私聊文件发送成功！(接口: {action_name})")
+                    return True
+                except Exception as e:
+                    logger.warning(f"[Gemini TTS] 私聊文件接口 {action_name} ({str(f_arg)[:30]}...) 尝试失败: {e}")
+
+        return False
+
     @filter.on_llm_request()
     async def inject_tts_instruction(self, event: AstrMessageEvent, req: ProviderRequest):
-        """注入系统提示词以引导 LLM 知道可以使用该特殊语法生成语音回复"""
-        if self.enable_system_prompt and self.system_prompt_addition:
+        """注入系统提示词以引导 LLM 知道可以使用该特殊语法生成语音回复与长音频"""
+        if not self.enable_system_prompt or not self.system_prompt_addition:
+            return
+
+        should_inject = self.config.get("always_inject_prompt", True)
+        if not should_inject:
+            kw_str = self.config.get("trigger_keywords", "语音,说,唱,读,听,声音,tts,voice,speak,read,listen,audio")
+            keywords = [k.strip().lower() for k in re.split(r"[,，\n]", kw_str) if k.strip()]
+            user_msg = event.get_message_str().strip().lower()
+            for kw in keywords:
+                try:
+                    if re.search(kw, user_msg):
+                        should_inject = True
+                        break
+                except re.error:
+                    if kw in user_msg:
+                        should_inject = True
+                        break
+
+        if should_inject:
             sys_prompt = self.system_prompt_addition
             if self.audio_profile_mode == "ai" and "audio_profile" not in sys_prompt:
-                sys_prompt += "\n\n【音频画像补充说明】\n你可以在 `<gemini_tts>` 标签中添加 `audio_profile` 属性来自行定义音频的角色画像（例如：`audio_profile=\"傲娇美少女\"` 或 `audio_profile=\"冷酷大叔\"` 等），以此让语音更加符合人设。"
+                sys_prompt += "\n\n【音频画像补充说明】\n你可以在 `<gemini_tts>` 或 `<gemini_long_tts>` 标签中添加 `audio_profile` 属性来自行定义音频的角色画像（例如：`audio_profile=\"傲娇美少女\"` 或 `audio_profile=\"冷酷大叔\"` 等），以此让语音更加符合人设。"
+            
+            if self.enable_long_tts:
+                sys_prompt += (
+                    "\n\n【长音频/多角色播客/对白指南】\n"
+                    "你拥有长音频分段生成与多角色拼接能力。当用户需要长文朗读、播客讨论、故事讲述或多人对话时，请按照约 45 秒（约 150~250 字，根据语义自然分句弹性调整）为一段，将内容分为若干段，每一段使用一个 `<gemini_long_tts>` 标签包裹：\n"
+                    "<gemini_long_tts voice=\"发音人\" scene=\"语气/环境\" sample_context=\"上下文\" audio_profile=\"音频画像\">第1段45秒左右内容</gemini_long_tts>\n"
+                    "<gemini_long_tts voice=\"发音人\" scene=\"语气/环境\" sample_context=\"上下文\" audio_profile=\"音频画像\">第2段45秒左右内容</gemini_long_tts>\n"
+                    "\n说明：\n"
+                    "1. 每段标签均可独立指定 `voice`（如 Zephyr, Puck, Charon, Kore, Fenrir, Aoede）和 `audio_profile`（如“主持人”、“嘉宾”、“傲娇女高”、“冷酷大叔”等），模拟不同角色发音！\n"
+                    "2. 所有 `<gemini_long_tts>` 标签将在后台自动依次合成并拼接为同一个完整音频文件发送给用户。"
+                )
+
             req.system_prompt = (req.system_prompt or "") + sys_prompt
 
     @filter.on_decorating_result()
     async def process_text_and_tts(self, event: AstrMessageEvent):
-        """拦截最终回复，提取 <gemini_tts> 标签内容并自动转为语音组件"""
+        """拦截最终回复，提取 <gemini_long_tts> 与 <gemini_tts> 标签内容并自动转为语音/音频文件组件"""
         result = event.get_result()
         if not result or not result.chain:
             return
@@ -131,10 +351,45 @@ class GeminiTTSPlugin(Star):
         for comp in result.chain:
             if isinstance(comp, Plain):
                 text = comp.text
-                matches = list(self.tts_tag_pattern.finditer(text))
                 
+                # 1. 优先处理长音频标签 <gemini_long_tts>
+                if self.enable_long_tts:
+                    long_matches = list(self.long_tts_tag_pattern.finditer(text))
+                    if long_matches:
+                        segments = []
+                        for match in long_matches:
+                            attr_str = match.group(1) or ""
+                            inner_text = match.group(2) or ""
+                            attrs = self.parse_tag_attributes(attr_str)
+                            attrs["text"] = inner_text
+                            segments.append(attrs)
+
+                        first_start = long_matches[0].start()
+                        if first_start > 0:
+                            prefix_text = text[:first_start]
+                            if prefix_text.strip():
+                                new_chain.append(Plain(prefix_text))
+
+                        audio_path = await self.generate_long_tts_audio(event, segments)
+                        if audio_path:
+                            sent = await self.send_file_via_onebot(event, audio_path)
+                            if not sent:
+                                new_chain.append(self.create_file_component(audio_path))
+                        else:
+                            new_chain.append(Plain("\n（长音频生成失败）\n"))
+
+                        last_end = long_matches[-1].end()
+                        text = text[last_end:]
+                        event.set_extra("gemini_tts_called", True)
+
+                if not text:
+                    continue
+
+                # 2. 处理标准短语音标签 <gemini_tts>
+                matches = list(self.tts_tag_pattern.finditer(text))
                 if not matches:
-                    new_chain.append(comp)
+                    if text.strip():
+                        new_chain.append(Plain(text))
                     continue
 
                 last_idx = 0
@@ -148,36 +403,15 @@ class GeminiTTSPlugin(Star):
 
                     attr_str = match.group(1) or ""
                     inner_text = match.group(2) or ""
-
-                    voice = None
-                    scene = None
-                    sample_context = None
-                    audio_profile = None
-
-                    if attr_str:
-                        voice_match = re.search(r'voice=["\']([^"\']*)["\']', attr_str)
-                        if voice_match:
-                            voice = voice_match.group(1)
-                        
-                        scene_match = re.search(r'scene=["\']([^"\']*)["\']', attr_str)
-                        if scene_match:
-                            scene = scene_match.group(1)
-                        
-                        context_match = re.search(r'sample_context=["\']([^"\']*)["\']', attr_str)
-                        if context_match:
-                            sample_context = context_match.group(1)
-
-                        audio_profile_match = re.search(r'(?:audio_profile|profile)=["\']([^"\']*)["\']', attr_str)
-                        if audio_profile_match:
-                            audio_profile = audio_profile_match.group(1)
+                    attrs = self.parse_tag_attributes(attr_str)
 
                     audio_path = await self.generate_tts_audio(
                         event=event,
                         text=inner_text,
-                        voice_name=voice,
-                        scene=scene,
-                        sample_context=sample_context,
-                        audio_profile=audio_profile
+                        voice_name=attrs["voice"],
+                        scene=attrs["scene"],
+                        sample_context=attrs["sample_context"],
+                        audio_profile=attrs["audio_profile"]
                     )
 
                     if audio_path:
@@ -197,16 +431,15 @@ class GeminiTTSPlugin(Star):
 
         result.chain = new_chain
 
-    async def generate_tts_audio(
+    async def fetch_tts_raw_audio(
         self,
-        event: AstrMessageEvent,
         text: str,
         voice_name: Optional[str] = None,
         scene: Optional[str] = None,
         sample_context: Optional[str] = None,
         audio_profile: Optional[str] = None
-    ) -> Optional[str]:
-        """核心语音合成业务逻辑"""
+    ) -> Optional[Tuple[bytes, str]]:
+        """调用 Gemini API 生成原始 PCM 音频数据及 mime_type"""
         cleaned_text = self.clean_text_for_tts(text)
         if not cleaned_text:
             return None
@@ -218,15 +451,13 @@ class GeminiTTSPlugin(Star):
         final_scene = scene.strip() if (scene and scene.strip()) else self.default_scene.strip()
         final_context = sample_context.strip() if (sample_context and sample_context.strip()) else self.default_sample_context.strip()
         
-        # Resolve audio profile based on mode
         final_audio_profile = None
         if self.audio_profile_mode == "ai":
             final_audio_profile = audio_profile.strip() if (audio_profile and audio_profile.strip()) else self.default_audio_profile.strip()
         elif self.audio_profile_mode == "default":
             final_audio_profile = self.default_audio_profile.strip()
-        # if mode is "disable", final_audio_profile remains None
         
-        logger.info(f"[Gemini TTS] 正在提取标签进行合成. 文本: '{cleaned_text[:30]}...' 发音人: {selected_voice} 场景: {final_scene} 背景: {final_context} 画像: {final_audio_profile}")
+        logger.info(f"[Gemini TTS] 正在请求 API. 文本: '{cleaned_text[:30]}...' 发音人: {selected_voice} 场景: {final_scene} 背景: {final_context} 画像: {final_audio_profile}")
         
         max_attempts = self.get_total_keys_count()
         if max_attempts == 0:
@@ -270,7 +501,6 @@ class GeminiTTSPlugin(Star):
                     ),
                 ]
                 
-                # 配置解锁安全限制，避免敏感词/拟声词导致的合成拦截
                 generate_content_config = types.GenerateContentConfig(
                     temperature=self.temperature,
                     response_modalities=["audio"],
@@ -304,14 +534,12 @@ class GeminiTTSPlugin(Star):
                 audio_data = b""
                 mime_type = None
                 
-                # 🛠️ 关键修改点：使用 aio 异步获取流式音频响应
                 response_stream = await client.aio.models.generate_content_stream(
                     model=self.tts_model,
                     contents=contents,
                     config=generate_content_config,
                 )
                 
-                # 🛠️ 关键修改点：使用 async for 进行非阻塞数据流获取
                 async for chunk in response_stream:
                     if chunk.parts is None:
                         continue
@@ -326,27 +554,8 @@ class GeminiTTSPlugin(Star):
                     
                 if not mime_type:
                     mime_type = "audio/L16;rate=24000"
-                    
-                file_extension = mimetypes.guess_extension(mime_type)
-                if file_extension is None:
-                    file_extension = ".wav"
-                    data_buffer = self.convert_to_wav(audio_data, mime_type)
-                else:
-                    data_buffer = audio_data
-                    
-                temp_dir = tempfile.gettempdir()
-                temp_file_name = f"gemini_tts_{uuid.uuid4().hex}{file_extension}"
-                temp_file_path = os.path.join(temp_dir, temp_file_name)
-                
-                with open(temp_file_path, "wb") as f:
-                    f.write(data_buffer)
-                    
-                logger.info(f"[Gemini TTS] 音频文件生成成功: {temp_file_path}")
-                
-                if hasattr(event, "track_temporary_local_file"):
-                    event.track_temporary_local_file(temp_file_path)
-                
-                return temp_file_path
+
+                return audio_data, mime_type
                 
             except Exception as e:
                 last_exception = e
@@ -360,6 +569,127 @@ class GeminiTTSPlugin(Star):
                     
         logger.error(f"[Gemini TTS] 所有配置的 API Key 均已尝试，仍未能成功生成音频。最后一次报错: {last_exception}", exc_info=True)
         return None
+
+    def get_temp_dir(self) -> str:
+        """获取共享临时存储目录（放在插件数据目录下，确保 Docker/NapCat 容器共享存储可访问）"""
+        try:
+            data_dir = StarTools.get_data_dir("astrbot_plugin_gemini_tts")
+            temp_dir = os.path.join(str(data_dir), "temp")
+            os.makedirs(temp_dir, exist_ok=True)
+            return temp_dir
+        except Exception:
+            return tempfile.gettempdir()
+
+    async def generate_tts_audio(
+        self,
+        event: AstrMessageEvent,
+        text: str,
+        voice_name: Optional[str] = None,
+        scene: Optional[str] = None,
+        sample_context: Optional[str] = None,
+        audio_profile: Optional[str] = None
+    ) -> Optional[str]:
+        """核心单段语音合成业务逻辑"""
+        res = await self.fetch_tts_raw_audio(
+            text=text,
+            voice_name=voice_name,
+            scene=scene,
+            sample_context=sample_context,
+            audio_profile=audio_profile
+        )
+        if not res:
+            return None
+
+        audio_data, mime_type = res
+        file_extension = mimetypes.guess_extension(mime_type)
+        if file_extension is None:
+            file_extension = ".wav"
+            data_buffer = self.convert_to_wav(audio_data, mime_type)
+        else:
+            data_buffer = audio_data
+
+        temp_dir = self.get_temp_dir()
+        temp_file_name = f"gemini_tts_{uuid.uuid4().hex}{file_extension}"
+        temp_file_path = os.path.join(temp_dir, temp_file_name)
+
+        with open(temp_file_path, "wb") as f:
+            f.write(data_buffer)
+
+        logger.info(f"[Gemini TTS] 音频文件生成成功: {temp_file_path}")
+
+        if hasattr(event, "track_temporary_local_file"):
+            event.track_temporary_local_file(temp_file_path)
+
+        return temp_file_path
+
+    async def generate_long_tts_audio(
+        self,
+        event: AstrMessageEvent,
+        segments: List[dict]
+    ) -> Optional[str]:
+        """多段长音频并发合成并按顺序拼接为单个 WAV 音频文件"""
+        if not segments:
+            return None
+
+        total_segments = len(segments)
+        logger.info(f"[Gemini Long TTS] ⚡ 开始并发合成长音频，共 {total_segments} 段...")
+
+        # 构建所有段落的并发 TTS 请求任务
+        tasks = [
+            self.fetch_tts_raw_audio(
+                text=seg.get("text", ""),
+                voice_name=seg.get("voice"),
+                scene=seg.get("scene"),
+                sample_context=seg.get("sample_context"),
+                audio_profile=seg.get("audio_profile")
+            )
+            for seg in segments
+        ]
+
+        # 并发并行执行所有请求，极大提升合成效率
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        combined_pcm = b""
+        final_mime_type = "audio/L16;rate=24000"
+
+        silence_sec = max(0.0, self.long_tts_silence_sec)
+        # 16-bit mono PCM @ 24000Hz = 24000 samples/sec * 2 bytes/sample
+        silence_bytes = b'\x00' * int(24000 * 2 * silence_sec)
+
+        success_count = 0
+        for i, res in enumerate(results, 1):
+            if isinstance(res, Exception):
+                logger.warning(f"[Gemini Long TTS] ⚠️ 第 {i}/{total_segments} 段并发合成抛出异常，跳过该段: {res}")
+                continue
+            if res:
+                pcm_data, mime = res
+                if mime:
+                    final_mime_type = mime
+                if combined_pcm and silence_bytes:
+                    combined_pcm += silence_bytes
+                combined_pcm += pcm_data
+                success_count += 1
+            else:
+                logger.warning(f"[Gemini Long TTS] ⚠️ 第 {i}/{total_segments} 段未获取到音频数据，跳过该段。")
+
+        if not combined_pcm or success_count == 0:
+            logger.error("[Gemini Long TTS] 所有长音频段落均合成失败。")
+            return None
+
+        wav_buffer = self.convert_to_wav(combined_pcm, final_mime_type)
+        temp_dir = self.get_temp_dir()
+        temp_file_name = f"gemini_long_tts_{uuid.uuid4().hex}.wav"
+        temp_file_path = os.path.join(temp_dir, temp_file_name)
+
+        with open(temp_file_path, "wb") as f:
+            f.write(wav_buffer)
+
+        logger.info(f"[Gemini Long TTS] ✨ 长音频并发合成并拼接成功 (成功 {success_count}/{total_segments} 段): {temp_file_path}")
+
+        if hasattr(event, "track_temporary_local_file"):
+            event.track_temporary_local_file(temp_file_path)
+
+        return temp_file_path
 
     def convert_to_wav(self, audio_data: bytes, mime_type: str) -> bytes:
         """为原始的 PCM 语音 data 加上 WAV 头部"""
