@@ -25,23 +25,16 @@ except ImportError:
 
 
 DEFAULT_SYSTEM_PROMPT_ADDITION = (
-    "【语音回复指南】\n"
-    "你拥有将文字转换为语音发送的能力。如果用户明确要求发语音，或你认为当前场景使用语音回复更符合语境，请使用以下 XML 格式的标签将需要转换为语音的内容包裹起来：\n\n"
-    '<gemini_tts voice="发音人" scene="语气/环境" sample_context="上下文" audio_profile="音频画像">想要发音的文字</gemini_tts>\n\n'
-    "【可选参数】\n"
-    "1. `voice`: 若用户无明确指定，请保持缺省。只有当用户明确要求使用特定声音时，可指定为 Puck, Charon, Kore, Fenrir, Aoede, Zephyr 之一（注意区分大小写）。\n"
-    "2. `scene`: 语气（如：悄悄耳语、非常激动、叹气、少女音、带有南方口音等）。\n"
-    "3. `sample_context`: 对话的上下文，可以不写。\n"
-    "4. `audio_profile`: 音频人设画像，用于设定发音人的声线和人设风格（如：傲娇美少女、冷酷大叔、温柔大姐姐、专业男播音员等），可以不写。\n"
-    "参数均用英文/中文写（对于 audio_profile 和 scene，中文支持更佳，voice 必须是英文发音人名字）。\n\n"
-    "【高级控制】\n"
-    "你可以在 <gemini_tts> 内部直接使用方括号 `[动作或情绪描述]` 控制声音。Gemini 能自主理解并演绎这些标记。\n\n"
-    "【示例】：\n"
-    "- 叹气与停顿：<gemini_tts>[sighs] 唉……[short pause] 那我也只能原谅你了。</gemini_tts>\n"
-    "- 其他任意语气：[excited] , [angry] , [sad] 等，请根据语境自由发挥，必须用英文tag。\n\n"
-    "注意事项：\n"
-    "- 标签内的文本应适合语音流利读出，不要包含 Markdown 标记（如 *、_、# 等）或换行和不可读字符。\n"
-    "- 你可以在同一条回复中混合文本和语音，如：“好呀，我来给你读首诗 <gemini_tts>床前明月光...</gemini_tts>”。如果你只想发语音，可以只输出 `<gemini_tts>` 标签本身。"
+    "【语音能力】\n"
+    "你可以把回复中的部分文字转为语音：将待朗读内容包在 <gemini_tts>...</gemini_tts> 中，标签外的文字照常以文字发送，整条回复也可以只有标签。不要用代码块包裹标签。\n\n"
+    "【使用时机】仅当用户要求语音、朗读、唱歌、讲故事，或语境明显适合语音（如哄睡、语音问候、角色演绎）时才使用；其它情况一律纯文字回复。普通文字中禁止出现 [sighs]、[whispers] 等声音标记，它们只能写在标签内部。\n\n"
+    "【属性（均可省略）】\n"
+    'voice：发音人，仅当用户指定声音时使用，可选 Puck, Charon, Kore, Fenrir, Aoede, Zephyr（区分大小写）\n'
+    'scene：语气/环境，如"悄悄耳语""非常激动"\n'
+    "sample_context：上下文背景\n"
+    'audio_profile：发音人的人设声线，如"傲娇美少女""专业男播音员"（中文描述更佳）\n\n'
+    "【标签内规则】只放适合朗读的干净文字：不含 Markdown 符号、链接、换行。可用英文方括号标记控制演绎，如 [sighs] [whispers] [short pause] [excited]。\n\n"
+    '示例：<gemini_tts scene="耳语">[whispers] 晚安，做个好梦。</gemini_tts>'
 )
 
 
@@ -430,13 +423,7 @@ class GeminiTTSPlugin(Star):
 
             if self.enable_long_tts:
                 sys_prompt += (
-                    "\n\n【长音频/多角色播客/对白指南】\n"
-                    "你拥有长音频分段生成与多角色拼接能力。当用户需要长文朗读、播客讨论、故事讲述或多人对话时，请按照约 45 秒（约 150~250 字）为一段，将内容分为若干段，每一段使用一个 `<gemini_long_tts>` 标签包裹：\n"
-                    '<gemini_long_tts voice="发音人" scene="语气/环境" sample_context="上下文" audio_profile="音频画像">第1段45秒左右内容</gemini_long_tts>\n'
-                    '<gemini_long_tts voice="发音人" scene="语气/环境" sample_context="上下文" audio_profile="音频画像">第2段45秒左右内容</gemini_long_tts>\n'
-                    "\n说明：\n"
-                    "1. 每段标签均可独立指定 `voice`（如 Zephyr, Puck, Charon, Kore, Fenrir, Aoede）和 `audio_profile`（如“主持人”、“嘉宾”、“傲娇女高”、“冷酷大叔”等），模拟不同角色发音！\n"
-                    "2. 所有 `<gemini_long_tts>` 标签将在后台自动依次合成并拼接为同一个完整音频文件发送给用户。"
+                    "\n\n【长音频/多角色】需要长文朗读、播客或多人对话时，按语义把内容分成若干段（每段约150~250字），每段用 <gemini_long_tts>...</gemini_long_tts> 包裹，属性与 <gemini_tts> 相同；各段可指定不同的 voice 和 audio_profile 扮演不同角色，插件会自动依次合成并拼接为一个音频文件发送。"
                 )
 
             req.system_prompt = (req.system_prompt or "") + sys_prompt
