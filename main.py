@@ -414,19 +414,18 @@ class GeminiTTSPlugin(Star):
                         break
 
         if should_inject:
-            sys_prompt = self.system_prompt_addition
-            if self.audio_profile_mode == "ai" and "audio_profile" not in sys_prompt:
-                sys_prompt += (
-                    "\n\n【音频画像补充说明】\n"
-                    "你可以在 `<gemini_tts>` 或 `<gemini_long_tts>` 标签中添加 `audio_profile` 属性来自行定义音频的角色画像（例如：`audio_profile=\"傲娇美少女\"` 或 `audio_profile=\"冷酷大叔\"` 等），以此让语音更加符合人设。"
-                )
+            sys_prompt = DEFAULT_SYSTEM_PROMPT_ADDITION
+
+            custom_addition = self.config.get("system_prompt_addition", "").strip()
+            if custom_addition and custom_addition != DEFAULT_SYSTEM_PROMPT_ADDITION.strip():
+                sys_prompt += f"\n\n【额外自定义要求】\n{custom_addition}"
 
             if self.enable_long_tts:
                 sys_prompt += (
                     "\n\n【长音频/多角色】需要长文朗读、播客或多人对话时，按语义把内容分成若干段（每段约150~250字），每段用 <gemini_long_tts>...</gemini_long_tts> 包裹，属性与 <gemini_tts> 相同；各段可指定不同的 voice 和 audio_profile 扮演不同角色，插件会自动依次合成并拼接为一个音频文件发送。"
                 )
 
-            req.system_prompt = (req.system_prompt or "") + sys_prompt
+            req.system_prompt = (req.system_prompt or "") + "\n\n" + sys_prompt
 
     def _process_short_tts_in_text(
         self, text: str, event: AstrMessageEvent

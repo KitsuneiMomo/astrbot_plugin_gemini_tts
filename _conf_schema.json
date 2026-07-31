@@ -107,10 +107,10 @@
     "default": "语音,说,唱,读,听,声音,tts,voice,speak,read,listen,audio"
   },
   "system_prompt_addition": {
-    "description": "引导使用语音的提示词内容",
+    "description": "额外自定义提示词要求",
     "type": "text",
-    "hint": "注入到 system prompt 中引导 AI 如何在回复中输出语音标签指令",
-    "default": "【语音能力】\n你可以把回复中的部分文字转为语音：将待朗读内容包在 <gemini_tts>...</gemini_tts> 中，标签外的文字照常以文字发送，整条回复也可以只有标签。不要用代码块包裹标签。\n\n【使用时机】仅当用户要求语音、朗读、唱歌、讲故事，或语境明显适合语音（如哄睡、语音问候、角色演绎）时才使用；其它情况一律纯文字回复。普通文字中禁止出现 [sighs]、[whispers] 等声音标记，它们只能写在标签内部。\n\n【属性（均可省略）】\nvoice：发音人，仅当用户指定声音时使用，可选 Puck, Charon, Kore, Fenrir, Aoede, Zephyr（区分大小写）\nscene：语气/环境，如\"悄悄耳语\"\"非常激动\"\nsample_context：上下文背景\naudio_profile：发音人的人设声线，如\"傲娇美少女\"\"专业男播音员\"（中文描述更佳）\n\n【标签内规则】只放适合朗读的干净文字：不含 Markdown 符号、链接、换行。可用英文方括号标记控制演绎，如 [sighs] [whispers] [short pause] [excited]。\n\n示例：<gemini_tts scene=\"耳语\">[whispers] 晚安，做个好梦。</gemini_tts>"
+    "hint": "填入需要给 AI 补充的额外要求（例如：'回复语气请尽量热情可爱'）。插件会自动保留基础语音指南，并将您填写的文字作为额外要求附加在末尾。留空则仅使用系统默认语音指南。",
+    "default": ""
   },
   "default_scene": {
     "description": "默认语气/环境 (Scene)",
