@@ -1,6 +1,6 @@
 name: astrbot_plugin_gemini_tts
-display_name: "Gemini TTS"
-desc: "让AI可以调用Gemini TTS工具发送语音"
-version: "1.2.2"
+display_name: "Gemini 3.8 TTS"
+desc: "基于谷歌 Gemini 3.8 纯真 TTS 引擎打造的极速语音合成插件，支持专属 Voice ID 与极低延迟"
+version: "2.0.0"
 author: KitsuneiMomo
 repo: https://github.com/KitsuneiMomo/astrbot_plugin_gemini_tts

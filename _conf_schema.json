@@ -9,147 +9,83 @@
     "default": []
   },
   "tts_model": {
-    "description": "TTS 模型名称",
+    "description": "TTS 模型选择",
     "type": "string",
-    "hint": "使用的 Gemini TTS 模型名称，如 gemini-3.1-flash-tts-preview 或 gemini-2.0-flash-exp",
-    "default": "gemini-3.1-flash-tts-preview"
+    "hint": "gemini-3.8-flash-lite-tts (推荐：毫秒级响应、超低延迟、资费低，最适合聊天Bot)；gemini-3.8-flash-tts (旗舰级高拟真创作)",
+    "default": "gemini-3.8-flash-lite-tts",
+    "options": [
+      "gemini-3.8-flash-lite-tts",
+      "gemini-3.8-flash-tts"
+    ],
+    "labels": [
+      "gemini-3.8-flash-lite-tts (推荐：聊天极速版)",
+      "gemini-3.8-flash-tts (旗舰高拟真创作版)"
+    ]
   },
   "voice_name": {
-    "description": "默认发音人",
+    "description": "默认发音人音色",
     "type": "string",
-    "hint": "选择默认的 Gemini TTS 发音人。若选择 Custom 可以在下方手动填入自定义发音人名称。",
-    "default": "Zephyr",
+    "hint": "选择默认的发音人。若选择 Custom，可在下方手动填入任意其他内置音色名称（如 Sulafat 等）或专属 Voice ID。",
+    "default": "Puck",
     "options": [
-      "Zephyr",
-      "Aoede",
-      "Kore",
-      "Leda",
       "Puck",
       "Charon",
+      "Kore",
       "Fenrir",
+      "Aoede",
+      "Zephyr",
+      "Leda",
       "Orus",
+      "Enceladus",
       "Custom"
     ],
     "labels": [
-      "Zephyr (明亮/高音 - 清澈活力)",
-      "Aoede (轻松/中音 - 放松自然闲聊)",
-      "Kore (坚定/中音 - 稳重且自信)",
-      "Leda (年轻/高音 - 青春洋溢)",
-      "Puck (欢快/中音 - 阳光风趣)",
-      "Charon (资讯/低音 - 冷静沉稳客观)",
-      "Fenrir (兴奋/中低音 - 充满能量与激情)",
-      "Orus (坚定/中低音 - 稳健笃定)",
-      "Custom (自定义发音人)"
+      "Puck (欢快阳光)",
+      "Charon (冷静沉稳)",
+      "Kore (稳重自信)",
+      "Fenrir (兴奋能量)",
+      "Aoede (自然轻松)",
+      "Zephyr (清澈明亮)",
+      "Leda (青春洋溢)",
+      "Orus (坚定稳健)",
+      "Enceladus (温和低沉)",
+      "Custom (自定义内置音色名称或专属 Voice ID)"
     ]
   },
   "custom_voice": {
-    "description": "自定义发音人",
+    "description": "自定义音色名称 / 专属 Voice ID",
     "type": "string",
-    "hint": "若上面'默认发音人'选择为 Custom，在此处填入自定义的发音人名称（如 Sulafat, Rasalgethi 等，注意区分大小写）。",
+    "hint": "当上方'默认发音人音色'选择 Custom 时生效。可填入任意 Google 官方内置声音（如 Sulafat, Despina, Achernar, Rasalgethi 等，注意大小写），或者填入在 AI Studio 捏好的专属 Voice ID (如 voice_xxxxxxxx)。",
     "default": ""
   },
   "temperature": {
-    "description": "合成温度(Temperature)",
+    "description": "合成温度 (Temperature)",
     "type": "float",
-    "hint": "控制语音合成的随机度和节奏，范围在0.0到2.0之间，默认 1.0",
+    "hint": "控制语音合成的韵律和节奏变化，范围在 0.0 到 2.0 之间，默认 1.0",
     "default": 1.0
-  },
-  "audio_profile_mode": {
-    "description": "音频画像模式 (Audio Profile)",
-    "type": "string",
-    "hint": "选择如何应用音频人设画像。'AI自主编写'：优先使用AI在语音标签中指定的画像，缺省时使用默认值；'仅使用默认值'：始终使用下方设置的默认音频画像；'不使用'：不启用音频画像功能。",
-    "default": "ai",
-    "options": [
-      "ai",
-      "default",
-      "disable"
-    ],
-    "labels": [
-      "AI自主编写",
-      "仅使用默认值",
-      "不使用"
-    ]
-  },
-  "default_audio_profile": {
-    "description": "默认音频画像",
-    "type": "string",
-    "hint": "当选择'仅使用默认值'，或'AI自主编写'且AI未指定画像时，使用的默认音频人设画像（例如：傲娇美少女、冷酷大叔等）。留空则不使用。",
-    "default": ""
   },
   "enable_system_prompt": {
     "description": "自动注入引导提示词",
     "type": "bool",
-    "hint": "是否在 LLM 请求前自动注入提示词，引导 AI 酌情使用 XML 标签产生语音回复",
+    "hint": "是否在 LLM 请求前自动注入提示词，引导 AI 仅在需要时使用 <gemini_tts> 标签产生语音回复",
     "default": true
-  },
-  "enable_long_tts": {
-    "description": "启用长音频合成能力",
-    "type": "bool",
-    "hint": "开启后支持 AI 使用 <gemini_long_tts> 标签输出多段长音频（如播客、多主角对白、长文章朗读等），拼接后发送为音频文件。",
-    "default": false
-  },
-  "long_tts_silence_sec": {
-    "description": "长音频分段间隔静音(秒)",
-    "type": "float",
-    "hint": "每段长音频拼接时的静音停顿长度（秒），推荐 0.3~0.5 秒。",
-    "default": 0.4
   },
   "always_inject_prompt": {
     "description": "全局注入提示词",
     "type": "bool",
-    "hint": "开启后，总是注入语音提示词；关闭后，只有用户输入包含触发词时才注入提示词，以节省 token 消耗。",
+    "hint": "开启后总是注入语音提示词；关闭后只有当用户发言命中下方触发词时才注入提示词，以节省 token。",
     "default": true
   },
   "trigger_keywords": {
     "description": "语音触发关键词",
     "type": "string",
-    "hint": "用英文/中文逗号或换行分隔。关闭“全局注入提示词”后，当用户发言命中以下任一关键词时才注入语音提示词。",
+    "hint": "用逗号或换行分隔。关闭'全局注入提示词'后，当用户发言命中以下关键词时才激活语音引导。",
     "default": "语音,说,唱,读,听,声音,tts,voice,speak,read,listen,audio"
   },
   "system_prompt_addition": {
     "description": "额外自定义提示词要求",
     "type": "text",
-    "hint": "填入需要给 AI 补充的额外要求（例如：'回复语气请尽量热情可爱'）。插件会自动保留基础语音指南，并将您填写的文字作为额外要求附加在末尾。留空则仅使用系统默认语音指南。",
+    "hint": "可附加在默认语音指南末尾的额外指示（留空则仅使用系统默认语音指南）。",
     "default": ""
-  },
-  "default_scene": {
-    "description": "默认语气/环境 (Scene)",
-    "type": "string",
-    "hint": "当 LLM 输出未指定 scene 时使用的默认语气或环境描述（如：悄悄耳语、非常激动、叹气、少女音、带有南方口音、夜晚等）。留空则不使用。",
-    "default": ""
-  },
-  "default_sample_context": {
-    "description": "默认对话上下文 (Sample Context)",
-    "type": "string",
-    "hint": "当 LLM 输出未指定 sample_context 时使用的默认对话上下文背景信息。留空则不使用。",
-    "default": ""
-  },
-  "safety_threshold": {
-    "description": "Gemini 内容安全审查等级",
-    "type": "string",
-    "hint": "控制 Gemini TTS 对合成内容的审核敏感度。BLOCK_NONE(完全关闭审核，适合特定合规场景)；BLOCK_ONLY_HIGH(仅拦截极高风险内容，推荐)；BLOCK_MEDIUM_AND_ABOVE(拦截中高风险内容)。",
-    "default": "BLOCK_ONLY_HIGH",
-    "options": [
-      "BLOCK_NONE",
-      "BLOCK_ONLY_HIGH",
-      "BLOCK_MEDIUM_AND_ABOVE"
-    ],
-    "labels": [
-      "BLOCK_NONE (完全关闭审核)",
-      "BLOCK_ONLY_HIGH (仅拦截极高风险内容 - 推荐)",
-      "BLOCK_MEDIUM_AND_ABOVE (严格 - 拦截中高风险内容)"
-    ]
-  },
-  "max_long_tts_segments": {
-    "description": "长音频最大允许分段数",
-    "type": "int",
-    "hint": "单次长音频合成最多允许的 <gemini_long_tts> 标签段数，超出部分将被自动忽略，防止无限生成爆额度。",
-    "default": 15
-  },
-  "max_concurrent_tasks": {
-    "description": "长音频并发合成最大并发数",
-    "type": "int",
-    "hint": "长音频分段并发合成时的最大并发请求数，推荐设置 2~4，避免因瞬间并发请求数过高触发 Gemini API 429 速率限制。",
-    "default": 3
   }
 }
