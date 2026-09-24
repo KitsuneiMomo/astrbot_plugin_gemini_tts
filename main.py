@@ -39,7 +39,7 @@ DEFAULT_SYSTEM_PROMPT_ADDITION = (
 @register(
     "astrbot_plugin_gemini_tts",
     "KitsuneiMomo",
-    "基于谷歌 Gemini 3.8 纯真 TTS 引擎打造的极速语音合成插件，支持专属 Voice ID",
+    "调用谷歌 Gemini 3.8 TTS 接口的语音合成插件，支持自定义专属 Voice ID",
     "2.0.0",
     "https://github.com/KitsuneiMomo/astrbot_plugin_gemini_tts",
 )
@@ -377,7 +377,7 @@ class GeminiTTSPlugin(Star):
             try:
                 client = genai.Client(api_key=api_key)
 
-                # 配置 Gemini 3.8 纯真 TTS 请求体
+                # 配置 Gemini 3.8 TTS 请求体
                 speech_config = types.SpeechConfig(
                     voice_config=types.VoiceConfig(
                         prebuilt_voice_config=types.PrebuiltVoiceConfig(

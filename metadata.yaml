@@ -1,6 +1,6 @@
 name: astrbot_plugin_gemini_tts
 display_name: "Gemini 3.8 TTS"
-desc: "基于谷歌 Gemini 3.8 纯真 TTS 引擎打造的极速语音合成插件，支持专属 Voice ID 与极低延迟"
+desc: "调用谷歌 Gemini 3.8 TTS 接口的语音合成插件，支持自定义专属 Voice ID"
 version: "2.0.0"
 author: KitsuneiMomo
 repo: https://github.com/KitsuneiMomo/astrbot_plugin_gemini_tts
