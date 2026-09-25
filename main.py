@@ -90,6 +90,9 @@ class GeminiTTSPlugin(Star):
         except RuntimeError:
             pass
 
+        # 缓存映射解析出来的 Voice ID (避免频繁调用 API 查表)
+        self._voice_id_cache = {}
+
         voice_display = self.get_active_voice()
         logger.info(
             f"[Gemini 3.8 TTS] 插件 v2.0.0 初始化成功 (模型: {self.tts_model}, 音色: {voice_display}, 审核: BLOCK_NONE)"
@@ -120,6 +123,34 @@ class GeminiTTSPlugin(Star):
             return self.custom_voice
 
         return self.voice_name if self.voice_name else "Puck"
+
+    def resolve_voice_id(self, client: genai.Client, raw_voice: str) -> str:
+        """若为专属音色的显示名称，自动匹配解析其对应的专属 Voice ID"""
+        if not raw_voice:
+            return "Puck"
+        if raw_voice.startswith("voice_"):
+            return raw_voice
+        if raw_voice.lower() in {"puck", "charon", "kore", "fenrir", "aoede", "zephyr", "leda", "orus", "enceladus"}:
+            return raw_voice
+
+        if raw_voice in self._voice_id_cache:
+            return self._voice_id_cache[raw_voice]
+
+        try:
+            resp = client.voices.list()
+            if hasattr(resp, "voices") and resp.voices:
+                for v in resp.voices:
+                    if getattr(v, "display_name", "").strip().lower() == raw_voice.strip().lower():
+                        vid = getattr(v, "id", None)
+                        if vid and vid.startswith("voice_"):
+                            logger.info(f"[Gemini 3.8 TTS] 自动将音色显示名 '{raw_voice}' 匹配为专属 Voice ID: {vid}")
+                            self._voice_id_cache[raw_voice] = vid
+                            return vid
+        except Exception as e:
+            logger.debug(f"[Gemini 3.8 TTS] 解析音色名称映射提示: {e}")
+
+        self._voice_id_cache[raw_voice] = raw_voice
+        return raw_voice
 
     async def _cleanup_old_temp_files(self):
         """清理 24 小时前创建的旧临时音频文件，防止磁盘堆积"""
@@ -377,14 +408,19 @@ class GeminiTTSPlugin(Star):
             try:
                 client = genai.Client(api_key=api_key)
 
-                # 配置 Gemini 3.8 TTS 请求体
-                speech_config = types.SpeechConfig(
-                    voice_config=types.VoiceConfig(
+                # 自动匹配显示名为对应的 Voice ID
+                resolved_voice = self.resolve_voice_id(client, active_voice)
+
+                # 配置 Gemini 3.8 TTS 请求体 (区分专属 Voice ID 与公共预置发音人)
+                if resolved_voice.startswith("voice_"):
+                    voice_cfg = types.VoiceConfig(voice=resolved_voice)
+                else:
+                    voice_cfg = types.VoiceConfig(
                         prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                            voice_name=active_voice
+                            voice_name=resolved_voice
                         )
                     )
-                )
+                speech_config = types.SpeechConfig(voice_config=voice_cfg)
 
                 generate_content_config = types.GenerateContentConfig(
                     temperature=self.temperature,
